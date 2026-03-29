@@ -1,0 +1,827 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1": {
+      "get": {
+        "operationId": "AppController_getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/signup": {
+      "post": {
+        "operationId": "AuthController_signup",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/resend-otp": {
+      "post": {
+        "operationId": "AuthController_resendOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "operationId": "AuthController_verifyOtp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/forgot-password/{email_id}": {
+      "post": {
+        "operationId": "AuthController_forgotPassword",
+        "parameters": [
+          {
+            "name": "email_id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/destroy": {
+      "post": {
+        "operationId": "AuthController_deleteUser",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/userlogoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/v1/user/{user_id}": {
+      "get": {
+        "operationId": "UsersController_profile",
+        "parameters": [
+          {
+            "name": "user_id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "User"
+        ]
+      }
+    },
+    "/api/v1/user/updateProfile": {
+      "post": {
+        "operationId": "UsersController_updateUser",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "User"
+        ]
+      }
+    },
+    "/api/v1/user/user/home": {
+      "get": {
+        "operationId": "UsersController_getStoresWithinRadius",
+        "parameters": [
+          {
+            "name": "latitude",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "longitude",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "radius",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "User"
+        ]
+      }
+    },
+    "/api/v1/store": {
+      "post": {
+        "operationId": "StoreController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStoreDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "store"
+        ]
+      },
+      "get": {
+        "operationId": "StoreController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "store"
+        ]
+      }
+    },
+    "/api/v1/store/{id}": {
+      "get": {
+        "operationId": "StoreController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "store"
+        ]
+      },
+      "patch": {
+        "operationId": "StoreController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStoreDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "store"
+        ]
+      },
+      "delete": {
+        "operationId": "StoreController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "store"
+        ]
+      }
+    },
+    "/api/v1/products": {
+      "post": {
+        "operationId": "ProductsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "products"
+        ]
+      },
+      "get": {
+        "operationId": "ProductsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/{id}": {
+      "get": {
+        "operationId": "ProductsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "products"
+        ]
+      },
+      "patch": {
+        "operationId": "ProductsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "products"
+        ]
+      },
+      "delete": {
+        "operationId": "ProductsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "products"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "pet API",
+    "description": "API Documentation",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email_id": {
+            "type": "string",
+            "example": "sample@gmail.com"
+          },
+          "password": {
+            "type": "string"
+          },
+          "device_token": {
+            "type": "string",
+            "example": ""
+          }
+        },
+        "required": [
+          "email_id",
+          "password",
+          "device_token"
+        ]
+      },
+      "SignupDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "ResendEmailDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "sample@gmail.com"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "VerifyOtpDto": {
+        "type": "object",
+        "properties": {
+          "email_id": {
+            "type": "string",
+            "example": "sample@gmail.com"
+          },
+          "otp": {
+            "type": "string",
+            "example": 1234
+          },
+          "device_token": {
+            "type": "string",
+            "example": ""
+          }
+        },
+        "required": [
+          "email_id",
+          "otp",
+          "device_token"
+        ]
+      },
+      "DeleteDto": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string",
+            "example": "Enter your email (or) mobile number include (+91)"
+          }
+        },
+        "required": [
+          "identity"
+        ]
+      },
+      "userlogoutDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "number",
+            "example": ""
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "user_name": {
+            "type": "string"
+          },
+          "email_id": {
+            "type": "string"
+          },
+          "mobile_no": {
+            "type": "string"
+          },
+          "invited_ref_code": {
+            "type": "string"
+          },
+          "referral_code": {
+            "type": "string"
+          },
+          "email_verified": {
+            "type": "boolean"
+          },
+          "dob": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "profile_url": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "device_token": {
+            "type": "string"
+          },
+          "gender": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_name",
+          "email_id",
+          "mobile_no",
+          "invited_ref_code",
+          "referral_code",
+          "email_verified",
+          "dob",
+          "profile_url",
+          "password",
+          "device_token",
+          "gender"
+        ]
+      },
+      "CreateStoreDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "My Store"
+          },
+          "image_url": {
+            "type": "string",
+            "example": "http://example.com/image.jpg"
+          },
+          "mobile_no": {
+            "type": "string",
+            "example": "1234567890"
+          },
+          "alternate_mobile_no": {
+            "type": "string",
+            "example": "1234567890"
+          },
+          "email": {
+            "type": "string",
+            "example": "store@example.com"
+          },
+          "category": {
+            "type": "string",
+            "example": "supermarket"
+          },
+          "street": {
+            "type": "string",
+            "example": "mount road"
+          },
+          "city": {
+            "type": "string",
+            "example": "Chennai"
+          },
+          "state": {
+            "type": "string",
+            "example": "Tamil Nadu"
+          },
+          "postal_code": {
+            "type": "string",
+            "example": "600001"
+          },
+          "country": {
+            "type": "string",
+            "example": "India"
+          },
+          "open_time": {
+            "type": "string",
+            "example": "09:00"
+          },
+          "close_time": {
+            "type": "string",
+            "example": "21:00"
+          },
+          "owner_id": {
+            "type": "number",
+            "example": 1
+          },
+          "latitude": {
+            "type": "number",
+            "example": 13.0827
+          },
+          "longitude": {
+            "type": "number",
+            "example": 80.2707
+          }
+        },
+        "required": [
+          "name",
+          "image_url",
+          "mobile_no",
+          "alternate_mobile_no",
+          "email",
+          "category",
+          "street",
+          "city",
+          "state",
+          "postal_code",
+          "country",
+          "open_time",
+          "close_time",
+          "owner_id",
+          "latitude",
+          "longitude"
+        ]
+      },
+      "UpdateStoreDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateProductDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Surprise Bag - Bakery"
+          },
+          "product_image": {
+            "type": "string",
+            "example": "https://i.pcmag.com/imagery/articles/03xdeDG4m4n0gJG3CbFNIgm-17..v1661444591.png"
+          },
+          "description": {
+            "type": "string",
+            "example": "A surprise bag of fresh bakery items including bread, pastries, and more."
+          },
+          "category": {
+            "type": "string",
+            "example": "Bakery"
+          },
+          "store": {
+            "type": "number",
+            "example": 1
+          },
+          "product_id": {
+            "type": "number",
+            "example": 1
+          },
+          "original_price": {
+            "type": "number",
+            "example": 15
+          },
+          "discounted_price": {
+            "type": "number",
+            "example": 5
+          },
+          "currency": {
+            "type": "string",
+            "example": "INR"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 10
+          },
+          "pickup_start_time": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2024-11-22T14:00:00"
+          },
+          "pickup_end_time": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2024-11-22T18:00:00"
+          }
+        },
+        "required": [
+          "name",
+          "product_image",
+          "description",
+          "category",
+          "store",
+          "product_id",
+          "original_price",
+          "discounted_price",
+          "currency",
+          "quantity",
+          "pickup_start_time",
+          "pickup_end_time"
+        ]
+      },
+      "UpdateProductDto": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

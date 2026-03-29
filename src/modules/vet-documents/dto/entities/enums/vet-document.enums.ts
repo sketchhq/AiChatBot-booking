@@ -1,0 +1,12 @@
+export enum VetDocumentType {
+LICENSE = 'LICENSE',
+DEGREE = 'DEGREE',
+ID_PROOF = 'ID_PROOF',
+CLINIC_CERTIFICATE = 'CLINIC_CERTIFICATE',
+}
+
+export enum DocumentVerificationStatus {
+PENDING = 'PENDING',
+APPROVED = 'APPROVED',
+REJECTED = 'REJECTED',
+}

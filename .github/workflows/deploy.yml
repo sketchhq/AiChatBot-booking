@@ -1,0 +1,76 @@
+name: Deploy Pet ELF Store Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2️⃣ Remove unnecessary files before upload
+      - name: Remove unnecessary files before upload
+        run: |
+          rm -rf node_modules
+          rm -rf dist
+          rm -rf .git
+          rm -rf test
+          rm -rf .github
+
+      # 3️⃣ Clean server folder BUT KEEP .env
+      - name: Clean old project on server (keep .env)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            echo "🧹 Cleaning project but keeping .env..."
+            mkdir -p /var/www/pet_elf_store
+            cd /var/www/pet_elf_store
+
+            # Delete everything except .env
+            find . -mindepth 1 ! -name '.env' -exec rm -rf {} +
+
+      # 4️⃣ Upload project to server
+      - name: Upload project to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "./"
+          target: "/var/www/pet_elf_store"
+
+      # 5️⃣ Deploy using Docker
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            cd /var/www/pet_elf_store
+
+            echo "🛑 Stopping container..."
+            docker compose down --remove-orphans || true
+
+            echo "🐳 Building Docker..."
+            docker compose build --no-cache
+
+            echo "🚀 Starting app..."
+            docker compose up -d
+
+            echo "🧹 Removing unused Docker images..."
+            docker image prune -f
+
+            echo "🎉 Deployment Completed Successfully!"

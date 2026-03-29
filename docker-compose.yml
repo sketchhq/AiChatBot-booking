@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: pet_elf_store_api
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "7000:8080"
