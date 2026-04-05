@@ -1,30 +1,30 @@
 import { config } from 'dotenv';
-import * as fs from 'fs';
 
 import { IDatabaseConfig } from './core/interfaces/dbConfig.interface';
 
 config();
 
-// Parse DATABASE_URL for Supabase
 const parseDatabaseUrl = (url: string) => {
-  const regex = /postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/;
+  const regex = /postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/;
   const match = url.match(regex);
   if (!match) {
-    throw new Error('Invalid DATABASE_URL format');
+    throw new Error('Invalid DATABASE_URL format. Expected: postgresql://user:pass@host:port/dbname');
   }
   return {
     username: match[1],
     password: match[2],
     host: match[3],
-    port: parseInt(match[4]),
+    port: parseInt(match[4], 10),
     database: match[5],
   };
 };
 
-const getDatabaseConfig = () => {
-  const databaseUrl = process.env.DATABASE_URL;
+const getDatabaseConfigForEnv = (env: string) => {
+  const envKey = env.toUpperCase();
+  const urlKey = env === 'local' ? 'DATABASE_URL_LOCAL' : `DATABASE_URL_${envKey}`;
+  const databaseUrl = process.env[urlKey] || process.env.DATABASE_URL;
+
   if (databaseUrl) {
-    // Use Supabase DATABASE_URL
     const dbConfig = parseDatabaseUrl(databaseUrl);
     return {
       username: dbConfig.username,
@@ -36,36 +36,43 @@ const getDatabaseConfig = () => {
       frontEndBaseUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
       ssl: { rejectUnauthorized: false },
     };
-  } else {
-    // Fallback to individual env vars (legacy)
-    return {
-      username: process.env.DB_USER_DEV,
-      password: process.env.DB_PASSWORD_DEV,
-      database: process.env.DB_NAME_DEV,
-      host: process.env.DB_HOST_DEV,
-      port: process.env.DB_PORT_DEV ? parseInt(process.env.DB_PORT_DEV) : 5432,
-      dialect: process.env.DB_DIALECT_DEV || 'postgres',
-      frontEndBaseUrl: process.env.FRONTEND_FORGET_URL_DEV || 'http://localhost:3000',
-      ssl: { rejectUnauthorized: false },
-    };
   }
+
+  const prefix = env === 'local' ? 'LOCAL' : envKey;
+  return {
+    username: process.env[`DB_USER_${prefix}`],
+    password: process.env[`DB_PASSWORD_${prefix}`],
+    database: process.env[`DB_NAME_${prefix}`],
+    host: process.env[`DB_HOST_${prefix}`],
+    port: process.env[`DB_PORT_${prefix}`] ? parseInt(process.env[`DB_PORT_${prefix}`], 10) : 5432,
+    dialect: process.env[`DB_DIALECT_${prefix}`] || 'postgres',
+    frontEndBaseUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+    ssl: { rejectUnauthorized: false },
+  };
 };
 
 export const databaseConfig: IDatabaseConfig = Object.freeze({
-  local: getDatabaseConfig(),
-  development: getDatabaseConfig(),
-  staging: getDatabaseConfig(),
-  production: getDatabaseConfig(),
+  local: getDatabaseConfigForEnv('local'),
+  development: getDatabaseConfigForEnv('development'),
+  staging: getDatabaseConfigForEnv('staging'),
+  production: getDatabaseConfigForEnv('production'),
 });
 
-// const env = process.env.NODE_ENV || 'development';
 const env = process.env.NODE_ENV && databaseConfig[process.env.NODE_ENV]
   ? process.env.NODE_ENV
-  : 'development';
+  : 'local';
 console.log('Current Environment:', env);
 
 const currentConfig = databaseConfig[env];
-if (!currentConfig.password) {
-  throw new Error(`❌ Missing DB password for environment: ${env}. Please set DATABASE_URL or individual DB_* variables.`);
+if (!currentConfig.password && env !== 'local') {
+  throw new Error(
+    `❌ Missing DB password for environment: ${env}.\n` +
+    `Set DATABASE_URL_${env.toUpperCase()} or DB_PASSWORD_${env.toUpperCase()} for this environment.`
+  );
 }
+
+if (!currentConfig.password && env === 'local') {
+  console.warn('⚠️ Local database password is not set. This is okay if your local Postgres uses trust auth.');
+}
+
 export const DBconfig = currentConfig;
