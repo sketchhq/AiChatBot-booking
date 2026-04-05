@@ -6,12 +6,12 @@ import { Repository } from 'typeorm';
 import { ProductRecommendationsService } from '../product-recommendations/recommendations.service';
 import { VeterinaryHospitalsService } from '../veterinary-hospitals/veterinary-hospitals.service';
 import { ChatbotFeedback } from '../feedback/entities/feedback.entity';
-import OpenAI from "openai";
-import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import Groq from "groq-sdk";
+import { ChatCompletionMessageParam } from 'groq-sdk/resources/chat/completions';
 
 @Injectable()
 export class MessagesService {
-  private openai: OpenAI;
+  private groq: Groq;
 
   constructor(
     @InjectRepository(Message)
@@ -27,13 +27,18 @@ export class MessagesService {
     @InjectRepository(ChatbotFeedback)
     private feedbackRepo: Repository<ChatbotFeedback>,
   ) {
-    const key = process.env.OPENAI_API_KEY;
-    console.log('[MessagesService] OpenAI Key Diagnostic:', {
+    const key = process.env.GROQ_API_KEY;
+    console.log('[MessagesService] Groq Key Diagnostic:', {
       length: key?.length || 0,
       start: key?.substring(0, 15),
       end: key?.substring((key?.length || 0) - 4)
     });
-    this.openai = new OpenAI({ apiKey: key });
+
+    if (!key) {
+      throw new Error('GROQ_API_KEY is required for MessagesService');
+    }
+
+    this.groq = new Groq({ apiKey: key });
   }
 
   async create(dto: any, userId: string) {
@@ -138,8 +143,8 @@ export class MessagesService {
         // Not JSON, use as-is
       }
 
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      const response = await this.groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
         temperature: 0.7,
         max_tokens: 15,
         messages: [
@@ -185,10 +190,10 @@ Rules:
 
 
   /**
-   * Parse stored content string into OpenAI-compatible message content.
+   * Parse stored content string into AI-compatible message content.
    * Handles both plain text and JSON-encoded multimodal content (image_url, file).
    */
-  private parseContentForOpenAI(content: string): string | any[] {
+  private parseContentForAI(content: string): string | any[] {
     if (!content) return content;
 
     try {
@@ -200,14 +205,14 @@ Rules:
           const hasFile = parsed.some(p => p.type === 'file');
 
           if (hasImage || hasFile) {
-            // Build OpenAI multimodal content array
+            // Build AI multimodal content array
             const parts: any[] = [];
 
             for (const part of parsed) {
               if (part.type === 'text') {
                 parts.push({ type: 'text', text: part.text || '' });
               } else if (part.type === 'image_url') {
-                // Normalize image_url format for OpenAI
+                // Normalize image_url format for AI
                 const url = typeof part.image_url === 'string'
                   ? part.image_url
                   : part.image_url?.url || part.image_url;
@@ -216,7 +221,7 @@ Rules:
                   image_url: { url }
                 });
               } else if (part.type === 'file') {
-                // For files, describe them as text since OpenAI can't read arbitrary files
+                // For files, describe them as text since AI can't read arbitrary files
                 const fileName = part.file?.name || 'Unknown file';
                 const fileUrl = part.file?.data || '';
                 parts.push({
@@ -244,7 +249,7 @@ Rules:
     if (frontendHistory && frontendHistory.length > 0) {
       historyMessages = frontendHistory.map(m => ({
         role: m.role as "user" | "assistant",
-        content: this.parseContentForOpenAI(m.content)
+        content: this.parseContentForAI(m.content)
       }));
     } else if (chatId && !chatId.startsWith('guest_chat')) {
       /**
@@ -258,7 +263,7 @@ Rules:
 
       // Parse history messages — handle multimodal content (images, files)
       historyMessages = history.map(m => {
-        const parsedContent = this.parseContentForOpenAI(m.content);
+        const parsedContent = this.parseContentForAI(m.content);
         return {
           role: m.role as "user" | "assistant",
           content: parsedContent
@@ -267,7 +272,7 @@ Rules:
     }
 
     // Parse the current user query — it may contain image/file content
-    const userContent = this.parseContentForOpenAI(query);
+    const userContent = this.parseContentForAI(query);
     const hasVision = Array.isArray(userContent) && userContent.some(p => p.type === 'image_url');
 
     // Use gpt-4o for vision requests, gpt-4o-mini for text-only
@@ -428,12 +433,12 @@ User: "My puppy isn't eating well"
 
 
     /**
-     * Call OpenAI
+     * Call Groq
      */
-    console.log('[MessagesService] Calling OpenAI for completion...', { model, messageCount: messages.length, hasVision });
+    console.log('[MessagesService] Calling Groq for completion...', { model, messageCount: messages.length, hasVision });
     let response;
     try {
-      response = await this.openai.chat.completions.create({
+      response = await this.groq.chat.completions.create({
         model,
         messages,
         // Only include tools for non-vision requests (vision + tools can conflict)
@@ -447,11 +452,11 @@ User: "My puppy isn't eating well"
                 parameters: {
                   type: "object",
                   properties: {
-                    pet_type: { 
+                    pet_type: {
                       type: "string",
                       description: "Type of pet (dog, cat, bird, etc.)"
                     },
-                    query: { 
+                    query: {
                       type: "string",
                       description: "Product search query"
                     }
@@ -486,7 +491,7 @@ User: "My puppy isn't eating well"
         max_tokens: 1000
       });
     } catch (err: any) {
-      console.error('[MessagesService] OpenAI API ERROR:', {
+      console.error('[MessagesService] Groq API ERROR:', {
         status: err.status,
         message: err.message,
         type: err.type,
@@ -497,7 +502,7 @@ User: "My puppy isn't eating well"
 
 
     const message = response.choices[0].message;
-    console.log('[MessagesService] OpenAI Completion result:', { content: message.content, tool_calls: message.tool_calls?.length || 0 });
+    console.log('[MessagesService] Groq Completion result:', { content: message.content, tool_calls: message.tool_calls?.length || 0 });
 
 
     /**

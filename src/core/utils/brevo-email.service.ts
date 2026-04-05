@@ -7,32 +7,45 @@ export class BrevoEmailService {
   private apiInstance: Brevo.TransactionalEmailsApi;
   private senderEmail: string;
   private senderName: string;
+  private isLocalMode: boolean;
 
   constructor() {
+    this.isLocalMode = process.env.NODE_ENV === 'local';
     this.senderEmail = process.env.BREVO_SENDER_EMAIL;
     this.senderName = process.env.BREVO_SENDER_NAME || 'No-Reply';
 
     const apiKey = process.env.BREVO_API_KEY;
 
-    if (!apiKey) {
+    // Allow missing config in local mode
+    if (!apiKey && !this.isLocalMode) {
       throw new Error('BREVO_API_KEY missing from .env');
     }
-    if (!this.senderEmail) {
+    if (!this.senderEmail && !this.isLocalMode) {
       throw new Error('BREVO_SENDER_EMAIL missing from .env');
     }
 
-    const brevoClient = new Brevo.TransactionalEmailsApi();
-    brevoClient.setApiKey(
-      Brevo.TransactionalEmailsApiApiKeys.apiKey,
-      apiKey,
-    );
-
-    this.apiInstance = brevoClient;
+    if (apiKey && !this.isLocalMode) {
+      const brevoClient = new Brevo.TransactionalEmailsApi();
+      brevoClient.setApiKey(
+        Brevo.TransactionalEmailsApiApiKeys.apiKey,
+        apiKey,
+      );
+      this.apiInstance = brevoClient;
+    } else if (this.isLocalMode) {
+      logger.info('BrevoEmailService: Running in local mode, emails will be logged only');
+    }
   }
 
   // ---------------- Generic Send Email ----------------
   async sendEmail(to: string, subject: string, html: string) {
     try {
+      // In local mode, just log the email instead of sending
+      if (this.isLocalMode) {
+        logger.info(`[LOCAL MODE] Email would be sent to: ${to}`);
+        logger.info(`[LOCAL MODE] Subject: ${subject}`);
+        return { id: 'local-mock-id', messageId: 'local-mock-message' };
+      }
+
       const emailData = {
         sender: { email: this.senderEmail, name: this.senderName },
         to: [{ email: to }],
