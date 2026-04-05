@@ -1,19 +1,24 @@
 import { Injectable } from '@nestjs/common';
-import OpenAI from 'openai';
+import Groq from 'groq-sdk';
 
 @Injectable()
 export class AIService {
 
-  private openai: OpenAI;
+  private groq: Groq;
 
   constructor() {
-    const key = process.env.OPENAI_API_KEY;
-    console.log('[AIService] OpenAI Key Diagnostic:', {
+    const key = process.env.GROQ_API_KEY;
+    console.log('[AIService] Groq Key Diagnostic:', {
       length: key?.length || 0,
       start: key?.substring(0, 15),
       end: key?.substring((key?.length || 0) - 4)
     });
-    this.openai = new OpenAI({ apiKey: key });
+
+    if (!key) {
+      throw new Error('GROQ_API_KEY is required for AIService');
+    }
+
+    this.groq = new Groq({ apiKey: key });
   }
 
   private systemPrompt = `
@@ -132,12 +137,12 @@ User: "My puppy isn't eating well"
 
   async streamChat(messages: any[]) {
 
-    console.log('[AIService] Calling OpenAI streamChat...', { model: 'gpt-4o-mini', messageCount: messages.length });
+    console.log('[AIService] Calling Groq streamChat...', { model: 'llama-3.1-8b-instant', messageCount: messages.length });
     try {
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      const response = await this.groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
         //   stream: true,
-        stream: false, // TEMP: Disable streaming for now due to OpenAI issues
+        stream: false, // TEMP: Disable streaming for now due to issues
         temperature: 0.7,
         max_tokens: 1000,
         messages: [
@@ -181,11 +186,11 @@ User: "My puppy isn't eating well"
 
   async generateTitle(messages: any[]) {
 
-    console.log('[AIService] Calling OpenAI generateTitle...');
+    console.log('[AIService] Calling Groq generateTitle...');
     let response;
     try {
-      response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      response = await this.groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
         temperature: 0.5,
         max_tokens: 20,
         messages: [
