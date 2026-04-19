@@ -6,27 +6,27 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { VetAppointment } from './entities/vet-appointment.entity';
-import { CreateVetAppointmentDto } from './dto/create-vet-appointment.dto';
-import { UpdateVetAppointmentDto } from './dto/update-vet-appointment.dto';
-import { AppointmentPaymentStatus, AppointmentStatus } from './entities/vet-appointment.entity';
+import { Appointment } from './entities/appointment.entity';
+import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { AppointmentPaymentStatus, AppointmentStatus } from './entities/appointment.entity';
 import { FileUploadService } from 'src/common/file-upload/file-upload.service';
-import { Vet } from '../vets/entities/vet.entity';
-import { VetAvailabilityRule } from '../vet_availability_rules/entities/vet-availability-rule.entity';
+import { Doctor } from '../doctors/entities/doctor.entity';
+import { DoctorAvailabilityRule } from '../doctor_availability_rules/entities/doctor-availability-rule.entity';
 import { Address } from '../addresses/entities/address.entity';
 import { add } from 'date-fns';
 
 @Injectable()
-export class VetAppointmentsService {
+export class AppointmentsService {
   constructor(
-    @InjectRepository(VetAppointment)
-    private readonly repo: Repository<VetAppointment>,
+    @InjectRepository(Appointment)
+    private readonly repo: Repository<Appointment>,
 
-    @InjectRepository(Vet)
-    private readonly vetRepo: Repository<Vet>,
+    @InjectRepository(Doctor)
+    private readonly doctorRepo: Repository<Doctor>,
 
-    @InjectRepository(VetAvailabilityRule)
-    private readonly availabilityRepo: Repository<VetAvailabilityRule>,
+    @InjectRepository(DoctorAvailabilityRule)
+    private readonly availabilityRepo: Repository<DoctorAvailabilityRule>,
 
     @InjectRepository(Address)
     private readonly addressRepo: Repository<Address>,
@@ -101,9 +101,9 @@ export class VetAppointmentsService {
   /* =========================================
       CREATE APPOINTMENT
   ========================================= */
-  async create(dto: CreateVetAppointmentDto, user: any, files?: Express.Multer.File[]) {
-    /** ✔ CUSTOMER ONLY */
-    if (user.role !== 'CUSTOMER') {
+  async create(dto: CreateAppointmentDto, user: any, files?: Express.Multer.File[]) {
+    /** ✔ Allow customers and guest users */
+    if (user.role && user.role !== 'CUSTOMER') {
       throw new ForbiddenException(
         'Only customers can book appointments',
       );
@@ -154,18 +154,18 @@ export class VetAppointmentsService {
     }
 
 
-    const vet = await this.vetRepo.findOne({
-      where: { id: dto.vet_id },
+    const doctor = await this.doctorRepo.findOne({
+      where: { id: dto.doctor_id },
     });
 
-    if (!vet) {
-      throw new BadRequestException('Vet not found');
+    if (!doctor) {
+      throw new BadRequestException('Doctor not found');
     }
 
     const feeMap = {
-      ONLINE: vet.consultation_fee_online,
-      CLINIC: vet.consultation_fee_clinic,
-      HOME: vet.consultation_fee_home,
+      ONLINE: doctor.consultation_fee_online,
+      CLINIC: doctor.consultation_fee_clinic,
+      HOME: doctor.consultation_fee_home,
     };
 
     const price = Number(feeMap[dto.consultation_type] ?? 0);
@@ -173,7 +173,7 @@ export class VetAppointmentsService {
 
     const rule = await this.availabilityRepo.findOne({
       where: {
-        vet_id: dto.vet_id,
+        doctor_id: dto.doctor_id,
         consultation_type: dto.consultation_type,
         day_of_week: dayOfWeek,
         is_active: true,
@@ -182,7 +182,7 @@ export class VetAppointmentsService {
 
     if (!rule) {
       throw new BadRequestException(
-        'Vet is not available on selected day',
+        'Doctor is not available on selected day',
       );
     }
 
@@ -205,7 +205,7 @@ export class VetAppointmentsService {
     /** ✔ Slot conflict check */
     const conflict = await this.repo
       .createQueryBuilder('appointment')
-      .where('appointment.vet_id = :vet_id', { vet_id: dto.vet_id })
+      .where('appointment.doctor_id = :doctor_id', { doctor_id: dto.doctor_id })
       .andWhere('appointment.appointment_date = :date', {
         date: dto.appointment_date,
       })
@@ -273,7 +273,7 @@ export class VetAppointmentsService {
     const appointment = this.repo.create({
       ...dto,
       appointment_code: appointmentCode,
-      user_id: user.sub,
+      user_id: user.sub || user.id || user, // Handle guest users
       address_id: dto.consultation_type === 'HOME' ? dto.address_id : null,
       appointment_type: dto.appointment_type ?? 'Consultation',
       //status: AppointmentStatus.PENDING,
@@ -286,6 +286,7 @@ export class VetAppointmentsService {
       paid_amount: 0,
       price: price,
       duration_minutes: durationMinutes,
+      patient_type: dto.pet_id ? 'PET' : 'HUMAN',
 
       symptom_media_urls: mediaUrls,
     });

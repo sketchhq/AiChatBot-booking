@@ -27,7 +27,7 @@ import { VetDocumentsModule } from './modules/vet-documents/dto/entities/vet-doc
 import { FileUploadModule } from './common/file-upload/file-upload.module';
 import { VetEducationModule } from './modules/vet-education/vet-education.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
-import { VetAppointmentsModule } from './modules/vet_appointments/vet-appointments.module';
+import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AppointmentSlotLocksModule } from './modules/appointment_slot_locks/entities/appointment-slot-locks.module';
 import { VetAvailabilityRuleModule } from './modules/vet_availability_rules/vet-availability-rule.module';
 import { MessagesModule } from './modules/chatbot/messages/messages.module';
@@ -81,7 +81,7 @@ console.log('env--->', DBconfig.host, DBconfig.port, DBconfig.username, DBconfig
     VetBlockedSlotsModule,
     VetAvailabilityRuleModule,
     VetDocumentsModule,
-    VetAppointmentsModule,
+    AppointmentsModule,
     AppointmentSlotLocksModule,
     FileUploadModule,
     VetEducationModule,

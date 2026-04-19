@@ -8,18 +8,18 @@ import {
   IsArray,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ConsultationType } from 'src/modules/vet_availability_rules/entities/vet-availability-rule.entity';
+import { ConsultationType } from 'src/modules/doctor_availability_rules/entities/doctor-availability-rule.entity';
 
-export class CreateVetAppointmentDto {
+export class CreateAppointmentDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  pet_id?: string;
+
   @ApiProperty()
   @IsUUID()
   @IsNotEmpty()
-  pet_id: string;
-
-  @ApiProperty()
-  @IsUUID()
-  @IsNotEmpty()
-  vet_id: string;
+  doctor_id: string;
 
   @ApiPropertyOptional()
   @IsOptional()

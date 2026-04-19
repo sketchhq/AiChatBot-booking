@@ -20,13 +20,13 @@ import {
 
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { VetAppointmentsService } from './vet-appointments.service';
-import { CreateVetAppointmentDto } from './dto/create-vet-appointment.dto';
-import { UpdateVetAppointmentDto } from './dto/update-vet-appointment.dto';
+import { AppointmentsService } from './appointments.service';
+import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { Roles} from 'src/common/decorators/roles.decorator';
 import { RolesGuard } from 'src/common/guards/roles.guard';
-import { UploadAppointmentMediaDto } from './dto/create-vet-appointment.dto';
+import { UploadAppointmentMediaDto } from './dto/create-appointment.dto';
 import { UseInterceptors, UploadedFiles} from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 
@@ -35,8 +35,8 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 @ApiBearerAuth('access-token')
 @ApiTags('Vet Appointments')
 @Controller('vet-appointments')
-export class VetAppointmentsController {
-  constructor(private readonly service: VetAppointmentsService) {}
+export class AppointmentsController {
+  constructor(private readonly service: AppointmentsService) {}
 
   /** 🔥 Prevent empty request body */
   private validateBody(body: any) {
@@ -84,7 +84,7 @@ export class VetAppointmentsController {
 
 create(
   @UploadedFiles() files: Express.Multer.File[],
-  @Body() dto: CreateVetAppointmentDto,
+  @Body() dto: CreateAppointmentDto,
   @Req() req: any,
 ) {
   this.validateBody(dto);
@@ -133,7 +133,7 @@ getPayAtClinic(@Param('id') id: string, @Req() req: any) {
   @ApiOperation({ summary: 'Update appointment' })
   update(
     @Param('id') id: string,
-    @Body() dto: UpdateVetAppointmentDto,
+    @Body() dto: UpdateAppointmentDto,
     @Req() req: any,
   ) {
     this.validateBody(dto);

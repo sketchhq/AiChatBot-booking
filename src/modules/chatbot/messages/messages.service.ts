@@ -6,12 +6,30 @@ import { Repository } from 'typeorm';
 import { ProductRecommendationsService } from '../product-recommendations/recommendations.service';
 import { VeterinaryHospitalsService } from '../veterinary-hospitals/veterinary-hospitals.service';
 import { ChatbotFeedback } from '../feedback/entities/feedback.entity';
+import { AppointmentsService } from 'src/modules/appointments/appointments.service';
 import Groq from "groq-sdk";
 import { ChatCompletionMessageParam } from 'groq-sdk/resources/chat/completions';
+import { createClient } from 'redis';
+
+interface ConversationState {
+  stage: 'GREETING' | 'INTAKE' | 'SYMPTOMS' | 'URGENCY' | 'SLOTS' | 'BOOKING';
+  symptoms?: {
+    chief_complaint?: string;
+    duration?: string;
+    severity?: number;
+    urgency_level?: 'low' | 'medium' | 'high' | 'emergency';
+    analysis?: any;
+  };
+  selected_slot?: any;
+  doctor_speciality?: string;
+}
 
 @Injectable()
 export class MessagesService {
   private groq: Groq;
+  private redisClient: any | null = null;
+  private redisConnected = false;
+  private localConversationState = new Map<string, ConversationState>();
 
   constructor(
     @InjectRepository(Message)
@@ -26,6 +44,8 @@ export class MessagesService {
 
     @InjectRepository(ChatbotFeedback)
     private feedbackRepo: Repository<ChatbotFeedback>,
+
+    private appointmentsService: AppointmentsService,
   ) {
     const key = process.env.GROQ_API_KEY;
     console.log('[MessagesService] Groq Key Diagnostic:', {
@@ -39,6 +59,26 @@ export class MessagesService {
     }
 
     this.groq = new Groq({ apiKey: key });
+
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl && redisUrl !== 'false') {
+      this.redisClient = createClient({ url: redisUrl });
+
+      this.redisClient.on('ready', () => {
+        this.redisConnected = true;
+        console.log('[MessagesService] Redis connected:', redisUrl);
+      });
+
+      this.redisClient.on('error', (err) => {
+        console.error('[MessagesService] Redis Client Error:', err);
+      });
+
+      this.redisClient.connect().catch(err => {
+        console.error('[MessagesService] Redis connection failed:', err);
+      });
+    } else {
+      console.log('[MessagesService] Redis disabled: REDIS_URL not set or disabled. Using in-memory conversation state.');
+    }
   }
 
   async create(dto: any, userId: string) {
@@ -85,7 +125,7 @@ export class MessagesService {
     });
 
     // 🔥 Auto-generate chat title after first message (like ChatGPT)
-    const aiText = typeof ai === 'string' ? ai : (ai?.content || '');
+    const aiText = ai; // ai is now always a string from smartAI
     this.autoGenerateTitle(dto.chat_id, dto.content, aiText).catch(err =>
       console.error('[MessagesService] Auto-title generation failed:', err)
     );
@@ -242,411 +282,371 @@ Rules:
     return content;
   }
 
-  async smartAI(query: string, chatId: string, frontendHistory?: any[]) {
-
-    let historyMessages: ChatCompletionMessageParam[] = [];
-
-    if (frontendHistory && frontendHistory.length > 0) {
-      historyMessages = frontendHistory.map(m => ({
-        role: m.role as "user" | "assistant",
-        content: this.parseContentForAI(m.content)
-      }));
-    } else if (chatId && !chatId.startsWith('guest_chat')) {
-      /**
-       * Load conversation history
-       */
-      const history = await this.repo.find({
-        where: { chat_id: chatId },
-        order: { created_at: "ASC" },
-        take: 10
-      });
-
-      // Parse history messages — handle multimodal content (images, files)
-      historyMessages = history.map(m => {
-        const parsedContent = this.parseContentForAI(m.content);
-        return {
-          role: m.role as "user" | "assistant",
-          content: parsedContent
-        } as ChatCompletionMessageParam;
-      });
+  /**
+   * Get conversation state from Redis
+   */
+  private async getConversationState(chatId: string): Promise<ConversationState> {
+    if (!this.redisClient || !this.redisConnected) {
+      return this.localConversationState.get(chatId) || { stage: 'GREETING' };
     }
-
-    // Parse the current user query — it may contain image/file content
-    const userContent = this.parseContentForAI(query);
-    const hasVision = Array.isArray(userContent) && userContent.some(p => p.type === 'image_url');
-
-    // Use gpt-4o for vision requests, gpt-4o-mini for text-only
-    const model = hasVision ? 'gpt-4o' : 'gpt-4o-mini';
-
-    /**
-     * Build conversation messages
-     */
-    const messages: ChatCompletionMessageParam[] = [
-      {
-        role: "system",
-        content: `
-You are PetCareGPT, a professional AI-powered pet care assistant.
-
-You behave like ChatGPT:
-- Friendly and conversational
-- Give helpful medical advice for pet issues
-- Ask follow-up questions when needed
-- Use clean markdown formatting
-- DO NOT repeat the user's message
-- When a user uploads an image, ANALYZE it carefully and describe what you see
-- If the image shows a pet, identify the breed, health concerns, or anything relevant
-- If the image shows a product label, food, or document, read and analyze it
-
-========================
-🚨 CRITICAL TOOL USAGE RULES
-========================
-
-❌ DEFAULT BEHAVIOR: ANSWER DIRECTLY (NO TOOLS)
-
-For 95% of questions, you should answer directly WITHOUT using any tools.
-
-------------------------
-
-1️⃣ HEALTH & SYMPTOM QUESTIONS (NO TOOLS)
-
-When user mentions ANY health issue, symptom, or medical concern:
-- fever, vomiting, diarrhea, injury, infection
-- not eating, limping, scratching, coughing
-- skin issues, behavior changes, pain
-- "my pet is sick"
-- "what should I do if..."
-- "is it normal when..."
-
-👉 RESPONSE APPROACH:
-1. Acknowledge the concern
-2. Provide helpful medical information
-3. Suggest possible causes
-4. Give home care tips
-5. Advise when to see a vet
-6. DO NOT call any tool
-7. DO NOT search for vets unless they explicitly ask for location
-
-------------------------
-
-2️⃣ VET SEARCH TOOL (EXTREMELY STRICT)
-
-✅ ONLY call search_vets when user is EXPLICITLY looking for a VET LOCATION:
-- "find a vet near me"
-- "vet clinics in [city]"
-- "where is the nearest animal hospital"
-- "show me vets in [area]"
-- "I need a vet's address"
-- When user provides a city name IN RESPONSE to you asking for location
-- When user provides an area name IN RESPONSE to you asking for area
-
-❌ NEVER call search_vets for:
-- Symptoms or health questions
-- General advice ("should I take my dog to the vet?")
-- Medical concerns
-- ANY question that doesn't explicitly ask for a location/clinic
-
-IMPORTANT - SMART LOCATION FLOW:
-
-📍 Step 1 - If user asks for vets WITHOUT city:
-  - Ask: "Which city are you in?"
-
-📍 Step 2 - When user provides city (especially big cities like Chennai, Mumbai, Bangalore, Delhi):
-  - ALWAYS ask for area: "[City] is a large city. Which area are you looking in?"
-  - Example: "Chennai is a large city. Which area are you looking in? (e.g., Adyar, T Nagar, Anna Nagar)"
-
-📍 Step 3 - When user provides area:
-  - Call search_vets with BOTH city AND area
-  - If backend returns type="no_vets_in_area", the system will show alternative areas
-  - You should acknowledge this and wait for user to choose
-
-📍 Step 4 - If user confirms alternative area:
-  - Call search_vets again with city and the new area they selected
-
-REQUIRED PARAMETERS:
-- city (MUST be provided - ask if missing)
-- area (STRONGLY RECOMMENDED for large cities - ask if missing)
-
-EXAMPLES OF CORRECT FLOW:
-
-User: "find a vet"
-You: "Which city are you in?"
-User: "Chennai"
-You: "Chennai is a large city. Which area are you looking in? (e.g., Adyar, T Nagar, Anna Nagar)"
-User: "Adyar"
-You: [Call search_vets with city="Chennai", area="Adyar"]
-
-User: "vets in mumbai"
-You: "Which area of Mumbai are you looking in? (e.g., Andheri, Bandra, Powai)"
-User: "Bandra"
-You: [Call search_vets with city="Mumbai", area="Bandra"]
-
-------------------------
-
-3️⃣ PRODUCT SEARCH TOOL
-
-✅ ONLY call search_products when user wants to BUY/SHOP:
-- "I need dog food"
-- "show me toys for cats"
-- "what products do you have for..."
-- "I want to buy..."
-
-⚠️ IMPORTANT - SEARCH STRATEGY:
-- Our database does NOT have wet/dry food filters
-- When user asks for "cat food", search for "cat food" (not wet/dry specifics)
-- When user asks for "dry kibble", search for "cat food" or "dog food"
-- Let the product titles/descriptions show what type they are
-- DO NOT ask clarifying questions about wet vs dry - just search!
-
-❌ NEVER call for:
-- Health questions
-- General advice
-
-------------------------
-
-4️⃣ EXAMPLE SCENARIOS
-
-User: "My dog has a fever"
-✅ Correct: Provide medical advice directly (no tool)
-❌ Wrong: Call search_vets
-
-User: "My cat is vomiting, what should I do?"
-✅ Correct: Give advice on causes, home care, when to see vet (no tool)
-❌ Wrong: Call search_vets
-
-User: "Is there a vet near me in Mumbai?"
-✅ Correct: Call search_vets with city="Mumbai"
-❌ Wrong: Give general advice
-
-User: "My puppy isn't eating well"
-✅ Correct: Discuss possible reasons, feeding tips (no tool)
-❌ Wrong: Call any tool
-
-------------------------
-`
-      },
-      ...historyMessages,
-      {
-        role: "user",
-        content: userContent
-      } as ChatCompletionMessageParam
-    ];
-
-
-    /**
-     * Call Groq
-     */
-    console.log('[MessagesService] Calling Groq for completion...', { model, messageCount: messages.length, hasVision });
-    let response;
-    try {
-      response = await this.groq.chat.completions.create({
-        model,
-        messages,
-        // Only include tools for non-vision requests (vision + tools can conflict)
-        ...(hasVision ? {} : {
-          tools: [
-            {
-              type: "function" as const,
-              function: {
-                name: "search_products",
-                description: "ONLY use when user explicitly asks to BUY or SHOP for pet products, food, toys, accessories. DO NOT use for health advice or symptom questions.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    pet_type: {
-                      type: "string",
-                      description: "Type of pet (dog, cat, bird, etc.)"
-                    },
-                    query: {
-                      type: "string",
-                      description: "Product search query"
-                    }
-                  },
-                  required: ["query"]
-                }
-              }
-            },
-            {
-              type: "function" as const,
-              function: {
-                name: "search_vets",
-                description: "ONLY use when user explicitly asks to FIND a VET LOCATION, clinic, or hospital near them. NEVER use for symptoms, health issues, medical advice, or general questions. User must be looking for a physical vet location.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    city: { 
-                      type: "string",
-                      description: "City name"
-                    },
-                    area: { 
-                      type: "string",
-                      description: "Area or neighborhood name"
-                    }
-                  },
-                  required: ["city"]
-                }
-              }
-            }
-          ]
-        }),
-        max_tokens: 1000
-      });
-    } catch (err: any) {
-      console.error('[MessagesService] Groq API ERROR:', {
-        status: err.status,
-        message: err.message,
-        type: err.type,
-        code: err.code
-      });
-      throw err; // Re-throw to let Nest catch it for the 500 response
-    }
-
-
-    const message = response.choices[0].message;
-    console.log('[MessagesService] Groq Completion result:', { content: message.content, tool_calls: message.tool_calls?.length || 0 });
-
-
-    /**
-     * Normal conversation (no tool used)
-     */
-    if (!message.tool_calls || message.tool_calls.length === 0) {
-      return message.content;
-    }
-
-
-    const tool = message.tool_calls[0];
-
-    if (tool.type !== "function") {
-      return message.content;
-    }
-
-
-    let args: any = {};
 
     try {
-      args = JSON.parse(tool.function.arguments || "{}");
+      const stateKey = `chat_state:${chatId}`;
+      const stateData = await this.redisClient.get(stateKey);
+      if (stateData) {
+        return JSON.parse(stateData);
+      }
     } catch (err) {
-      console.error("Tool argument parse error:", err);
+      console.error('[MessagesService] Error getting conversation state:', err);
     }
 
-    // For text extraction from multimodal content
-    const queryText = typeof userContent === 'string' 
-      ? userContent 
-      : (Array.isArray(userContent) ? userContent.find(p => p.type === 'text')?.text || '' : '');
-
-    if (!args.query) {
-      args.query = queryText;
-    }
-
-
-    /**
-     * PRODUCT SEARCH
-     */
-    if (tool.function.name === "search_products") {
-      console.log('[MessagesService] Tool Match: search_products', args);
-
-      const products = await this.productService.searchProducts({
-        query: args.query,
-        pet_type: args.pet_type || undefined,
-        limit: 5
-      });
-
-      console.log('[MessagesService] search_products result count:', products?.length || 0);
-
-      // 🚫 Safety check: if no results found, return the conversational advice instead of an empty search card
-      if (!products || products.length === 0) {
-        console.log('[MessagesService] Safety check: No products found, returning text only');
-        return message.content || `I couldn't find any ${args.pet_type || 'pet'} products matching "${args.query}". This might be because we don't have that specific item in our database yet. Is there something else I can help you find?`;
-      }
-
-      return {
-        type: "products",
-        data: products,
-        content: message.content
-      };
-    }
-
-
-    if (tool.function.name === "search_vets") {
-      console.log('[MessagesService] Tool Match: search_vets', args);
-
-      // 🚫 Safety check: if city is missing, don't call the tool, return content (which should be the question "Which city?")
-      if (!args.city) {
-        console.log('[MessagesService] Safety check: Missing city, returning text only');
-        return message.content || 'Please tell me which city you are in so I can help you find vets nearby.';
-      }
-
-      // 🔥 CRITICAL: If city is provided but NO area, ask for area (don't search yet)
-      if (args.city && !args.area) {
-        console.log('[MessagesService] City provided but no area - asking user for area');
-        
-        // List of major cities that need area specification
-        const majorCities = ['chennai', 'mumbai', 'delhi', 'bangalore', 'hyderabad', 'kolkata', 'pune', 'ahmedabad'];
-        const cityLower = args.city.toLowerCase();
-        
-        if (majorCities.includes(cityLower)) {
-          return message.content || `${args.city} is a large city. Which area are you looking in? This will help me find vets closest to you.`;
-        }
-      }
-
-      // Search for vets with both city and area (if provided)
-      const vets = await this.vetService.search({
-        city: args.city || undefined,
-        area: args.area || undefined,
-        // Note: Removed service filter to show all veterinary hospitals
-        limit: 10
-      });
-
-      console.log('[MessagesService] search_vets result count:', vets?.length || 0);
-
-      // 🔥 ENHANCED: If area was specified but no vets found, find nearby areas
-      if (args.area && (!vets || vets.length === 0)) {
-        console.log('[MessagesService] No vets in specified area, finding alternatives...');
-        
-        // Get all vets in the city to find available areas
-        const cityVets = await this.vetService.search({
-          city: args.city,
-          // Note: Removed service filter to get all veterinary hospitals
-          limit: 50 // Get more to find areas
-        });
-
-        if (cityVets && cityVets.length > 0) {
-          // Extract unique areas from city vets
-          const availableAreas = [...new Set(
-            cityVets
-              .map(v => v.area)
-              .filter(a => a && a.trim().length > 0)
-          )].slice(0, 5); // Top 5 areas
-
-          console.log('[MessagesService] Available nearby areas:', availableAreas);
-
-          // Return a special response asking user about alternative areas
-          return {
-            type: "no_vets_in_area",
-            city: args.city,
-            requestedArea: args.area,
-            availableAreas: availableAreas,
-            content: `I couldn't find any vets in ${args.area}, ${args.city}. However, I found vets in these nearby areas:\n\n${availableAreas.map((a, i) => `${i + 1}. ${a}`).join('\n')}\n\nWould you like me to show vets from any of these areas?`
-          };
-        }
-      }
-
-      // 🚫 Safety check: if no results found at all, return conversational message
-      if (!vets || vets.length === 0) {
-        console.log('[MessagesService] Safety check: No vets found in city, returning text only');
-        return message.content || `I couldn't find any vets in ${args.city}. This might be because:\n\n1. We don't have vet data for this city yet\n2. The city name might be misspelled\n\nPlease try another city or check the spelling.`;
-      }
-
-      return {
-        type: "vets",
-        data: vets,
-        content: message.content
-      };
-    }
-
-
-    return message.content;
+    return { stage: 'GREETING' };
   }
 
+  /**
+   * Set conversation state in Redis or in-memory fallback
+   */
+  private async setConversationState(chatId: string, state: ConversationState): Promise<void> {
+    if (!this.redisClient || !this.redisConnected) {
+      this.localConversationState.set(chatId, state);
+      return;
+    }
+
+    try {
+      const stateKey = `chat_state:${chatId}`;
+      await this.redisClient.setEx(stateKey, 3600, JSON.stringify(state)); // 1 hour expiry
+    } catch (err) {
+      console.error('[MessagesService] Error setting conversation state:', err);
+    }
+  }
+
+  async smartAI(query: string, chatId: string, frontendHistory?: any[]) {
+    // Get current conversation state
+    const currentState = await this.getConversationState(chatId);
+    console.log('[MessagesService] Current state:', currentState);
+
+    // Handle state transitions based on user input
+    let response: string;
+    let nextState = { ...currentState };
+
+    try {
+      switch (currentState.stage) {
+        case 'GREETING':
+          if (query.toLowerCase().includes('book') || query.toLowerCase().includes('appointment')) {
+            response = "Great! I'd be happy to help you book an appointment. What's bringing you in today? Please describe your main concern.";
+            nextState.stage = 'INTAKE';
+          } else {
+            response = "Hello! I'm MedBot, your AI appointment assistant. Are you looking to book an appointment today?";
+          }
+          break;
+
+        case 'INTAKE':
+          // Use Groq to analyze the chief complaint and extract symptoms
+          const symptomAnalysis = await this.analyzeSymptomsWithGroq(query);
+          console.log('[MessagesService] Symptom analysis:', symptomAnalysis);
+
+          response = `I understand you're experiencing: "${query}".
+
+To help you get the right care, I need to ask a few questions:
+
+1. How long have you had this issue?
+2. On a scale of 1-10, how severe is it?
+
+Please answer one at a time, starting with the duration.`;
+          nextState.stage = 'SYMPTOMS';
+          nextState.symptoms = {
+            chief_complaint: query,
+            analysis: symptomAnalysis
+          };
+          break;
+
+        case 'SYMPTOMS':
+          // Collect duration and severity, then use Groq for urgency assessment
+          if (!currentState.symptoms?.duration) {
+            nextState.symptoms = { ...currentState.symptoms, duration: query };
+            response = "Thanks. Now, on a scale of 1-10 (where 1 is mild discomfort and 10 is severe pain), how would you rate the severity?";
+          } else if (!currentState.symptoms?.severity) {
+            const severity = parseInt(query) || 5;
+            nextState.symptoms = { ...currentState.symptoms, severity };
+
+            // Use Groq to assess urgency based on symptoms
+            const urgencyAssessment = await this.assessUrgencyWithGroq(
+              currentState.symptoms.chief_complaint,
+              currentState.symptoms.duration,
+              severity
+            );
+            console.log('[MessagesService] Urgency assessment:', urgencyAssessment);
+
+            nextState.symptoms.urgency_level = urgencyAssessment.urgency;
+            nextState.stage = 'URGENCY';
+
+            if (urgencyAssessment.urgency === 'emergency') {
+              response = `🚨 **EMERGENCY ALERT**: ${urgencyAssessment.reason}
+
+**Please call emergency services (112) right now or go to the nearest emergency room.**
+
+If this is not an emergency and you'd still like to book an appointment, let me know.`;
+            } else {
+              response = `Thank you for that information. Based on your symptoms, I recommend seeing a doctor.
+
+**Summary:**
+- Concern: ${currentState.symptoms.chief_complaint}
+- Duration: ${currentState.symptoms.duration}
+- Severity: ${severity}/10
+- Urgency: ${urgencyAssessment.urgency.toUpperCase()}
+
+Would you like me to show you available appointment slots now?`;
+              nextState.stage = 'SLOTS';
+            }
+          } else {
+            response = "I'm sorry, I didn't understand that. Please tell me how long you've had this issue.";
+          }
+          break;
+
+        case 'SLOTS':
+          if (query.toLowerCase().includes('yes') || query.toLowerCase().includes('show') || query.toLowerCase().includes('slots')) {
+            response = "Great! Here are some available appointment slots with our doctors. Please select one:\n\n" +
+              "🩺 **Dr. Sharma** (General Physician)\n" +
+              "• Today 2:00 PM\n" +
+              "• Tomorrow 10:00 AM\n\n" +
+              "🩺 **Dr. Patel** (General Physician)\n" +
+              "• Today 4:00 PM\n" +
+              "• Tomorrow 11:00 AM\n\n" +
+              "Reply with the doctor name and time you'd prefer (e.g., 'Dr. Sharma today 2pm').";
+            nextState.stage = 'BOOKING';
+          } else {
+            response = "No problem. Let me know when you'd like to see the available slots.";
+          }
+          break;
+
+        case 'BOOKING':
+          // Simple slot selection parsing
+          const slotMatch = query.match(/(Dr\.\s*\w+)\s+(today|tomorrow)\s+(\d+)(?::(\d+))?\s*(am|pm)/i);
+          if (slotMatch) {
+            const [, doctor, day, hour, minute, period] = slotMatch;
+            const time = `${hour}:${minute || '00'} ${period.toUpperCase()}`;
+
+            // Actually book the appointment
+            const bookingResult = await this.bookAppointment(
+              userId, 
+              doctor, 
+              day, 
+              time, 
+              currentState.symptoms?.chief_complaint
+            );
+
+            if (bookingResult.success) {
+              response = `✅ **Appointment Confirmed!**
+
+**Doctor:** ${doctor}
+**Date:** ${day === 'today' ? 'Today' : 'Tomorrow'}
+**Time:** ${time}
+**Appointment Code:** ${bookingResult.appointment_code}
+
+You'll receive a confirmation message with all the details. Please arrive 15 minutes early.
+
+Is there anything else I can help you with?`;
+            } else {
+              response = `❌ **Booking Failed**
+
+${bookingResult.error}
+
+Please try selecting a different slot or contact support.`;
+            }
+            nextState.stage = 'GREETING'; // Reset for next conversation
+          } else {
+            response = "I didn't understand that slot selection. Please reply with the doctor name and time (e.g., 'Dr. Sharma today 2pm').";
+          }
+          break;
+
+        default:
+          response = "Hello! I'm MedBot. Are you looking to book an appointment?";
+          nextState.stage = 'GREETING';
+      }
+    } catch (error) {
+      console.error('[MessagesService] Error in smartAI:', error);
+      response = "I'm sorry, I'm having trouble processing your request. Please try again.";
+    }
+
+    // Save the updated state
+    await this.setConversationState(chatId, nextState);
+
+    return response;
+  }
+
+  /**
+   * Analyze symptoms using Groq AI
+   */
+  private async analyzeSymptomsWithGroq(symptoms: string): Promise<any> {
+    try {
+      const response = await this.groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a medical symptom analyzer. Analyze the patient's symptoms and return a JSON object with:
+            {
+              "possible_conditions": ["condition1", "condition2"],
+              "recommended_specialty": "specialty_name",
+              "severity_estimate": "low|medium|high",
+              "red_flags": ["flag1", "flag2"] // any concerning symptoms
+            }`
+          },
+          {
+            role: 'user',
+            content: `Patient symptoms: ${symptoms}`
+          }
+        ],
+        max_tokens: 300
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        try {
+          return JSON.parse(content);
+        } catch (e) {
+          console.log('[MessagesService] Groq symptom analysis (raw):', content);
+          return { possible_conditions: [], recommended_specialty: 'General Physician', severity_estimate: 'medium', red_flags: [] };
+        }
+      }
+    } catch (error) {
+      console.error('[MessagesService] Groq symptom analysis error:', error);
+    }
+
+    return { possible_conditions: [], recommended_specialty: 'General Physician', severity_estimate: 'medium', red_flags: [] };
+  }
+
+  /**
+   * Assess urgency using Groq AI
+   */
+  private async assessUrgencyWithGroq(chiefComplaint: string, duration: string, severity: number): Promise<{urgency: 'low' | 'medium' | 'high' | 'emergency', reason: string}> {
+    try {
+      const response = await this.groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a medical triage assistant. Based on symptoms, duration, and severity (1-10), determine urgency level.
+
+Return JSON: {"urgency": "low|medium|high|emergency", "reason": "brief explanation"}
+
+Emergency criteria:
+- Chest pain, shortness of breath, severe bleeding
+- Severe pain (8-10) with neurological symptoms
+- High fever with confusion
+- Severe allergic reactions
+
+High priority:
+- Moderate to severe pain (6-9)
+- Difficulty breathing
+- High fever
+- Severe headache with vomiting`
+          },
+          {
+            role: 'user',
+            content: `Symptoms: ${chiefComplaint}, Duration: ${duration}, Severity: ${severity}/10`
+          }
+        ],
+        max_tokens: 200
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        try {
+          const result = JSON.parse(content);
+          return {
+            urgency: result.urgency || 'medium',
+            reason: result.reason || 'Standard medical evaluation recommended'
+          };
+        } catch (e) {
+          console.log('[MessagesService] Groq urgency assessment (raw):', content);
+        }
+      }
+    } catch (error) {
+      console.error('[MessagesService] Groq urgency assessment error:', error);
+    }
+
+    // Fallback logic
+    let urgency: 'low' | 'medium' | 'high' | 'emergency' = 'low';
+    let reason = 'Standard medical evaluation recommended';
+
+    if (severity >= 9) {
+      urgency = 'emergency';
+      reason = 'High severity symptoms require immediate attention';
+    } else if (severity >= 7) {
+      urgency = 'high';
+      reason = 'Moderate to high severity symptoms should be evaluated soon';
+    } else if (severity >= 5) {
+      urgency = 'medium';
+      reason = 'Moderate symptoms warrant medical attention';
+    }
+
+    return { urgency, reason };
+  }
+
+  /**
+   * Book an appointment using the vet appointments service
+   */
+  private async bookAppointment(userId: string, doctorName: string, date: string, time: string, symptoms?: string) {
+    try {
+      // Find the doctor/vet by name (simplified - in real app would have better lookup)
+      const doctorMap = {
+        'Dr. Sharma': '550e8400-e29b-41d4-a716-446655440001', // Mock UUIDs for now
+        'Dr. Patel': '550e8400-e29b-41d4-a716-446655440002',
+      };
+
+      const vetId = doctorMap[doctorName as keyof typeof doctorMap];
+      if (!vetId) {
+        throw new Error(`Doctor ${doctorName} not found`);
+      }
+
+      // Parse date and time
+      const appointmentDate = date === 'today' ? new Date().toISOString().split('T')[0] : 
+                             date === 'tomorrow' ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] : 
+                             date;
+
+      // Convert time to start/end times (assuming 30 min slots)
+      const [hourStr, minuteStr, period] = time.split(/[:\s]/);
+      let hour = parseInt(hourStr);
+      if (period?.toLowerCase() === 'pm' && hour !== 12) hour += 12;
+      if (period?.toLowerCase() === 'am' && hour === 12) hour = 0;
+
+      const startTime = `${hour.toString().padStart(2, '0')}:${minuteStr || '00'}`;
+      const endHour = hour + (minuteStr ? 0 : 0) + 0; // Assuming 30 min slots
+      const endTime = `${(hour + 0).toString().padStart(2, '0')}:${minuteStr || '30'}`;
+
+      // Create appointment
+      const appointmentDto = {
+        doctor_id: vetId,
+        consultation_type: 'ONLINE' as const,
+        appointment_date: appointmentDate,
+        slot_start_time: startTime,
+        slot_end_time: endTime,
+        symptoms: symptoms || 'General consultation',
+        appointment_type: 'Consultation',
+      };
+
+      // Create a mock user object for guest users
+      const mockUser = { id: userId, sub: userId };
+
+      const appointment = await this.appointmentsService.create(appointmentDto, mockUser);
+      
+      return {
+        success: true,
+        appointment_code: appointment.appointment_code,
+        appointment_id: appointment.id,
+        doctor: doctorName,
+        date: appointmentDate,
+        time: startTime,
+      };
+    } catch (error) {
+      console.error('[MessagesService] Booking error:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to book appointment',
+      };
+    }
+  }
 
   /**
    * Feedback

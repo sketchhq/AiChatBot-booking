@@ -10,14 +10,14 @@ import { UserProfile } from 'src/modules/user-profiles/entities/user-profile.ent
 import { Clinic } from 'src/modules/clinic/entities/clinic.entity';
 import { Location } from 'src/modules/locations/entities/locations.entity';
 import { UserLoginSession } from 'src/modules/user-login-session/entities/user-login-session.entity';
-import { Vet } from 'src/modules/vets/entities/vet.entity';
-import { VetClinicMapping } from 'src/modules/vet-clinic-mapping/entities/vet-clinic-mapping.entity';
-import { VetBlockedSlot } from 'src/modules/vet-blocked-slots/entities/vet-blocked-slot.entity';
-import { VetDocument } from 'src/modules/vet-documents/dto/entities/vet-document.entity';
-import { VetAppointment } from 'src/modules/vet_appointments/entities/vet-appointment.entity';
+import { Doctor } from 'src/modules/doctors/entities/doctor.entity';
+import { DoctorClinicMapping } from 'src/modules/doctor-clinic-mapping/entities/doctor-clinic-mapping.entity';
+import { DoctorBlockedSlot } from 'src/modules/doctor-blocked-slots/entities/doctor-blocked-slot.entity';
+import { DoctorDocument } from 'src/modules/doctor-documents/dto/entities/doctor-document.entity';
+import { Appointment } from 'src/modules/appointments/entities/appointment.entity';
 import { AppointmentSlotLock } from 'src/modules/appointment_slot_locks/entities/appointment-slot-lock.entity';
-import { VetAvailabilityRule } from 'src/modules/vet_availability_rules/entities/vet-availability-rule.entity';
-import { VetEducation } from 'src/modules/vet-education/entities/vet-education.entity';
+import { DoctorAvailabilityRule } from 'src/modules/doctor_availability_rules/entities/doctor-availability-rule.entity';
+import { DoctorEducation } from 'src/modules/doctor-education/entities/doctor-education.entity';
 import { Chat } from 'src/modules/chatbot/chats/entities/chats.entity';
 import { ProductRecommendation } from 'src/modules/chatbot/product-recommendations/entities/recommendations.entity';
 import { Message } from 'src/modules/chatbot/messages/entities/messages.entity';
@@ -44,14 +44,14 @@ export const AppDataSource = new DataSource({
     Clinic,
     Location,
     UserLoginSession,
-    Vet,
-    VetClinicMapping,
-    VetBlockedSlot,
-    VetDocument,
-    VetAppointment,
+    Doctor,
+    DoctorClinicMapping,
+    DoctorBlockedSlot,
+    DoctorDocument,
+    Appointment,
     AppointmentSlotLock,
-    VetAvailabilityRule,
-    VetEducation,
+    DoctorAvailabilityRule,
+    DoctorEducation,
     Chat,
     ProductRecommendation,
     VeterinaryHospital,

@@ -16,7 +16,7 @@ export class MessagesController {
 
   @Post()
   create(@Body() dto: CreateMessageDto, @Query('guest_id') guestId: string, @Req() req) {
-    const userId = req.user?.sub || guestId;
+    const userId = req.user?.sub || guestId || (dto.chat_id ? `guest_${dto.chat_id}` : null);
     if (!userId) throw new UnauthorizedException('User/Guest ID required');
     return this.service.create(dto, userId);
   }

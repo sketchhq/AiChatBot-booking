@@ -27,13 +27,13 @@ import {
 } from 'typeorm';
 
 import { User } from '../../users/entities/user.entity';
-import { Vet } from '../../vets/entities/vet.entity';
+import { Doctor } from '../../doctors/entities/doctor.entity';
 import { Clinic } from 'src/modules/clinic/entities/clinic.entity';
 import { ConsultationType } from 'src/modules/vet_availability_rules/entities/vet-availability-rule.entity';
 import { Address } from 'src/modules/addresses/entities/address.entity';
 
-@Entity('vet_appointments')
-export class VetAppointment {
+@Entity('appointments')
+export class Appointment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -44,11 +44,14 @@ export class VetAppointment {
   @Column('uuid')
   user_id: string;
 
-  @Column('uuid')
-  pet_id: string;
+  @Column('uuid', { nullable: true })
+  pet_id?: string;
+
+  @Column({ type: 'varchar', length: 20, default: 'HUMAN' })
+  patient_type: string;
 
   @Column('uuid')
-  vet_id: string;
+  doctor_id: string;
 
   @Column('uuid', { nullable: true })
   clinic_id: string;
@@ -62,9 +65,9 @@ export class VetAppointment {
   user: User;
 
 
-  @ManyToOne(() => Vet)
-  @JoinColumn({ name: 'vet_id' })
-  vet: Vet;
+  @ManyToOne(() => Doctor)
+  @JoinColumn({ name: 'doctor_id' })
+  doctor: Doctor;
 
   @ManyToOne(() => Clinic, { nullable: true })
   @JoinColumn({ name: 'clinic_id' })
